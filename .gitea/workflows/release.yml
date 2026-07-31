@@ -1,0 +1,117 @@
+# Builds the le-fi binary for linux/amd64, linux/arm64, darwin/amd64,
+# and darwin/arm64 (on the ubuntu-latest act_runner label, cross-compiled -
+# Go needs no per-target toolchain for these combinations) and publishes
+# each as a release asset containing just the binary.
+#
+# Trigger: push a tag matching v* (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+#
+# Two jobs: create-release runs once and creates the Gitea release, then
+# build runs as a matrix and uploads one asset per platform to it. Splitting
+# these avoids every matrix leg racing to create the same release.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Grants GITEA_TOKEN write access to releases on this repo for this workflow.
+# (Gitea's `contents` scope covers both code and releases.)
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+      version: ${{ steps.create.outputs.version }}
+    steps:
+      - name: Create Gitea release
+        id: create
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          SERVER: ${{ gitea.server_url }}
+          REPO: ${{ gitea.repository }}
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME}"
+          RELEASE_ID=$(curl -sf -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${SERVER}/api/v1/repos/${REPO}/releases" \
+            -d "{\"tag_name\":\"${VERSION}\",\"name\":\"${VERSION}\",\"body\":\"Linux and macOS builds (amd64/arm64).\",\"draft\":false,\"prerelease\":false}" \
+            | jq -r .id)
+          echo "release_id=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Go
+        run: |
+          set -e
+          curl -fsSL https://go.dev/dl/go1.26.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
+          tar -C /usr/local -xzf /tmp/go.tar.gz
+          echo "/usr/local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-${{ matrix.goos }}-${{ matrix.goarch }}-
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -e
+          export PATH="/usr/local/go/bin:$PATH"
+          go build -o le-fi .
+
+      - name: Package binary-only zip
+        run: |
+          set -e
+          STAGE="le-fi-${{ needs.create-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p dist
+          # -j (junk paths): the zip contains just the binary, no directory entries.
+          zip -qj "dist/${STAGE}.zip" le-fi
+          {
+            echo "ASSET_PATH=dist/${STAGE}.zip"
+            echo "ASSET_NAME=${STAGE}.zip"
+          } >> "$GITEA_ENV"
+
+      - name: Upload release asset
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          SERVER: ${{ gitea.server_url }}
+          REPO: ${{ gitea.repository }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          set -e
+          curl -sf -X POST \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            -F "attachment=@${ASSET_PATH};type=application/zip" \
+            "${SERVER}/api/v1/repos/${REPO}/releases/${RELEASE_ID}/assets?name=${ASSET_NAME}"

@@ -68,7 +68,12 @@ jobs:
       - name: Install Go
         run: |
           set -e
-          curl -fsSL https://go.dev/dl/go1.26.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
+          case "$(uname -m)" in
+            x86_64) GOARCH_HOST=amd64 ;;
+            aarch64|arm64) GOARCH_HOST=arm64 ;;
+            *) echo "unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl -fsSL "https://go.dev/dl/go1.26.0.linux-${GOARCH_HOST}.tar.gz" -o /tmp/go.tar.gz
           tar -C /usr/local -xzf /tmp/go.tar.gz
           echo "/usr/local/go/bin" >> "$GITHUB_PATH"
 

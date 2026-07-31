@@ -82,6 +82,24 @@ Waiting for the transfer... (Ctrl+C to cancel)
 The tool exits automatically once the file is fully received, and tears
 down the tunnel cleanly (no lingering processes).
 
+## Testing
+
+```bash
+go test ./...
+```
+
+Two env vars, for tests and local debugging - not for real transfers,
+since they skip the tunnel entirely:
+
+- `LEFI_LOCAL=1` — skip Cloudflare, talk plain HTTP over localhost. The
+  sender's positional argument becomes `host:port` instead of a channel
+  name (e.g. `le-fi 127.0.0.1:9000 < file`).
+- `LEFI_PORT=<port>` — receiver binds this exact port instead of a random
+  one.
+
+`.gitea/workflows/test.yml` runs `go vet` and `go test -race` on every
+push to `main`.
+
 ## Releases
 
 Pushing a tag matching `v*` (e.g. `git tag v0.1.0 && git push origin v0.1.0`)

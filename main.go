@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -316,8 +317,35 @@ ATTRIBUTION:
 // No cloudflared library needed on this side at all - just a plain HTTP PUT.
 // ---------------------------------------------------------------------
 
+// ---------------------------------------------------------------------
+// Env-var driven config: lets both ends bypass Cloudflare entirely and
+// talk over plain localhost, for tests that need to run with no network
+// access and a predictable port. Not meant for real transfers - the
+// tunnel is what makes this work across two different machines/NATs.
+// ---------------------------------------------------------------------
+
+const (
+	envLocalMode = "LEFI_LOCAL" // any non-empty value: skip the tunnel, use plain HTTP on localhost
+	envPort      = "LEFI_PORT"  // receiver: bind this exact port instead of a random one
+)
+
+func localModeEnabled() bool {
+	return os.Getenv(envLocalMode) != ""
+}
+
+// targetURL builds the address a sender should PUT to, given the single
+// positional argument. In local mode "target" is a plain host:port and the
+// URL is unencrypted http; normally it's a trycloudflare.com channel name
+// over https.
+func targetURL(target string) string {
+	if localModeEnabled() {
+		return fmt.Sprintf("http://%s/", target)
+	}
+	return fmt.Sprintf("https://%s.trycloudflare.com/", target)
+}
+
 func runSender(channel string) int {
-	url := fmt.Sprintf("https://%s.trycloudflare.com/", channel)
+	url := targetURL(channel)
 
 	var req *http.Request
 	body := &crcTeeReader{
@@ -385,7 +413,17 @@ func runReceiver() int {
 	done := make(chan xferResult, 1)
 	prog := newProgress()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	bindPort := 0
+	if p := os.Getenv(envPort); p != "" {
+		v, perr := strconv.Atoi(p)
+		if perr != nil || v < 0 || v > 65535 {
+			fmt.Fprintf(ui, "warning: invalid %s=%q, ignoring (using a random port)\n", envPort, p)
+		} else {
+			bindPort = v
+		}
+	}
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", bindPort))
 	if err != nil {
 		fmt.Fprintln(ui, "error opening local listener:", err)
 		return 1
@@ -435,40 +473,52 @@ func runReceiver() int {
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
 
-	// Bring up the tunnel in-process via cloudflared's own Go packages.
-	bInfo := cliutil.GetBuildInfo("", "le-fi")
-	graceShutdownC := make(chan struct{})
-	tunnel.Init(bInfo, graceShutdownC)
-
-	app := &cli.App{
-		Name:     "cloudflared",
-		Commands: tunnel.Commands(),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	var channel, tunnelURL string
+	var cancel context.CancelFunc = func() {}
 	tunnelErrC := make(chan error, 1)
-	go func() {
-		tunnelErrC <- app.RunContext(ctx, []string{
-			"cloudflared", "tunnel",
-			"--url", fmt.Sprintf("http://127.0.0.1:%d", localPort),
-			"--no-autoupdate",
-			"--logfile", logPath.Name(),
-		})
-	}()
 
-	hostname, err := waitForTunnelHostname(logPath.Name(), tunnelErrC, 20*time.Second)
-	if err != nil {
-		fmt.Fprintln(ui, "error:", err)
-		cancel()
-		return 1
+	if localModeEnabled() {
+		close(tunnelErrC) // nothing to wait for; reading it returns immediately
+		channel = fmt.Sprintf("127.0.0.1:%d", localPort)
+		tunnelURL = "http://" + channel + "/"
+		fmt.Fprintf(ui, "Local mode active (%s set) - no Cloudflare tunnel, listening on %s.\n", envLocalMode, channel)
+		fmt.Fprintln(ui)
+	} else {
+		// Bring up the tunnel in-process via cloudflared's own Go packages.
+		bInfo := cliutil.GetBuildInfo("", "le-fi")
+		graceShutdownC := make(chan struct{})
+		tunnel.Init(bInfo, graceShutdownC)
+
+		app := &cli.App{
+			Name:     "cloudflared",
+			Commands: tunnel.Commands(),
+		}
+
+		var ctx context.Context
+		ctx, cancel = context.WithCancel(context.Background())
+		defer cancel()
+
+		go func() {
+			tunnelErrC <- app.RunContext(ctx, []string{
+				"cloudflared", "tunnel",
+				"--url", fmt.Sprintf("http://127.0.0.1:%d", localPort),
+				"--no-autoupdate",
+				"--logfile", logPath.Name(),
+			})
+		}()
+
+		hostname, err := waitForTunnelHostname(logPath.Name(), tunnelErrC, 20*time.Second)
+		if err != nil {
+			fmt.Fprintln(ui, "error:", err)
+			cancel()
+			return 1
+		}
+		channel = hostname[:len(hostname)-len(".trycloudflare.com")]
+		tunnelURL = "https://" + hostname + "/"
+
+		fmt.Fprintln(ui, "Tunnel is up (no account, no port forwarding - works through any NAT).")
+		fmt.Fprintln(ui)
 	}
-	channel := hostname[:len(hostname)-len(".trycloudflare.com")]
-	tunnelURL := "https://" + hostname + "/"
-
-	fmt.Fprintln(ui, "Tunnel is up (no account, no port forwarding - works through any NAT).")
-	fmt.Fprintln(ui)
 	fmt.Fprintln(ui, "If the remote party does NOT have this utility, they can send with:")
 	fmt.Fprintln(ui)
 	fmt.Fprintf(ui, "  curl -T - %s < file_to_be_send.bin\n", tunnelURL)

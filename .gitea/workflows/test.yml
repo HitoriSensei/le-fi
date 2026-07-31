@@ -1,0 +1,47 @@
+# Runs the test suite (main_test.go) on every push to main. These are
+# integration tests that build and run the real binary as subprocesses in
+# both sender and receiver roles, entirely over localhost via LEFI_LOCAL -
+# no Cloudflare tunnel, no outbound network access needed.
+
+name: test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Go
+        run: |
+          set -e
+          curl -fsSL https://go.dev/dl/go1.26.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
+          tar -C /usr/local -xzf /tmp/go.tar.gz
+          echo "/usr/local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-test-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-test-
+
+      - name: go vet
+        run: |
+          set -e
+          export PATH="/usr/local/go/bin:$PATH"
+          go vet ./...
+
+      - name: go test
+        run: |
+          set -e
+          export PATH="/usr/local/go/bin:$PATH"
+          go test -race -count=1 -timeout 180s -v ./...

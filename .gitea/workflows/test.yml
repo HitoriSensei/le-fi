@@ -49,4 +49,18 @@ jobs:
         run: |
           set -e
           export PATH="/usr/local/go/bin:$PATH"
-          go test -race -count=1 -timeout 180s -v ./...
+          # Race detection needs ThreadSanitizer, which refuses to run on
+          # some arm64 hosts ("unsupported VMA range" - a kernel/CPU
+          # addressing mismatch TSan itself can't work around). Try with
+          # -race first; only fall back to a plain run if that's why it
+          # failed, so an actual race (or any other failure) still fails
+          # the build.
+          if go test -race -count=1 -timeout 180s -v ./... 2>&1 | tee /tmp/go-test.log; then
+            exit 0
+          fi
+          if grep -q "ThreadSanitizer: unsupported VMA range" /tmp/go-test.log; then
+            echo "::warning::-race unsupported on this runner (ThreadSanitizer VMA mismatch) - re-running without it"
+            go test -count=1 -timeout 180s -v ./...
+          else
+            exit 1
+          fi

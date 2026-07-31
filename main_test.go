@@ -23,7 +23,26 @@ import (
 
 var binPath string
 
+// TestMain normally builds its own plain debug binary to test, same as
+// always. But if LEFI_TEST_BIN is set, it uses that binary instead of
+// building one - letting CI run this exact same test suite against the
+// real release artifact (CGO_ENABLED=0, -trimpath, -ldflags="-s -w"),
+// not just a separately-built unoptimized copy.
 func TestMain(m *testing.M) {
+	if pre := os.Getenv("LEFI_TEST_BIN"); pre != "" {
+		abs, err := filepath.Abs(pre)
+		if err != nil {
+			fmt.Println("invalid LEFI_TEST_BIN path:", err)
+			os.Exit(1)
+		}
+		if _, err := os.Stat(abs); err != nil {
+			fmt.Println("LEFI_TEST_BIN does not exist:", err)
+			os.Exit(1)
+		}
+		binPath = abs
+		os.Exit(m.Run())
+	}
+
 	dir, err := os.MkdirTemp("", "le-fi-test-bin-")
 	if err != nil {
 		fmt.Println("failed to create temp dir:", err)

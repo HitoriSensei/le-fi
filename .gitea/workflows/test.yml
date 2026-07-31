@@ -64,3 +64,19 @@ jobs:
           else
             exit 1
           fi
+
+      - name: Build release-flagged binary
+        run: |
+          set -e
+          export PATH="/usr/local/go/bin:$PATH"
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/le-fi-release-bin .
+
+      - name: Test the actual release binary
+        run: |
+          set -e
+          export PATH="/usr/local/go/bin:$PATH"
+          # Same test suite as above, but pointed at the real optimized
+          # (CGO_ENABLED=0, stripped, trimmed) artifact instead of a
+          # separately-built plain debug binary - catches anything that
+          # only breaks under those specific build flags.
+          LEFI_TEST_BIN=/tmp/le-fi-release-bin go test -count=1 -timeout 180s -v ./...

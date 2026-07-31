@@ -504,6 +504,15 @@ func runReceiver() int {
 				"--url", fmt.Sprintf("http://127.0.0.1:%d", localPort),
 				"--no-autoupdate",
 				"--logfile", logPath.Name(),
+				// cloudflared's own docs warn the metrics listener can bind
+				// to all interfaces "when running from a virtual
+				// environment" - pin it to localhost explicitly rather
+				// than trust that detection.
+				"--metrics", "127.0.0.1:0",
+				// Defaults to true upstream; disables the expanded
+				// /debug/pprof, /metrics, etc. routes reachable through
+				// the tunnel's management channel.
+				"--management-diagnostics=false",
 			})
 		}()
 

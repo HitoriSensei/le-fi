@@ -91,10 +91,11 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
         run: |
           set -e
           export PATH="/usr/local/go/bin:$PATH"
-          go build -o le-fi .
+          go build -trimpath -ldflags="-s -w" -o le-fi .
 
       - name: Package binary-only zip
         run: |

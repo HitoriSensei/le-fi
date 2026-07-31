@@ -18,6 +18,16 @@ tool's own sender mode.
 go build -o le-fi .
 ```
 
+Release builds add size/speed flags:
+
+```bash
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o le-fi .
+```
+
+`-s -w` strips debug symbols (~30% smaller), `-trimpath` drops local
+filesystem paths from the binary, `CGO_ENABLED=0` gives a fully static
+binary with no libc dependency.
+
 Requires Go 1.26+ (or just a modern Go with `GOTOOLCHAIN=auto`, the
 default since Go 1.21 — it'll fetch 1.26 for you automatically).
 
@@ -98,7 +108,9 @@ since they skip the tunnel entirely:
   one.
 
 `.gitea/workflows/test.yml` runs `go vet` and `go test -race` on every
-push to `main`.
+push to `main`, then builds the actual release-flagged binary
+(`CGO_ENABLED=0 -trimpath -ldflags="-s -w"`) and re-runs the whole suite
+against that real artifact via `LEFI_TEST_BIN=<path> go test ./...`.
 
 ## Releases
 
@@ -130,6 +142,34 @@ that's slow to re-fetch from scratch on every run.
 Windows isn't built yet — the stderr-silencing trick (see below) currently
 relies on `golang.org/x/sys/unix`, which needs a Unix-style equivalent
 worked out for Windows before that target can be added.
+
+## Telemetry
+
+None, by design. cloudflared does link in Sentry (crash reporting) and a
+local metrics server as part of its own codebase, so this was verified
+directly rather than assumed:
+
+- **Sentry**: `sentry.Init()` runs with Cloudflare's real DSN (it's
+  hardcoded in cloudflared, not something we can remove), but the only
+  code paths that would actually call `sentry.CaptureException` are gated
+  behind conditions this tool never triggers (FIPS mode, and file-based
+  TLS cert reloading - neither applies to quick tunnels). Confirmed with
+  an actual network trace (`strace -e trace=network`) during a real run:
+  Sentry's real IP never appears anywhere in the connection log.
+- **Metrics server**: cloudflared always starts a local Prometheus-style
+  metrics endpoint. It's forced to `127.0.0.1` explicitly in the tunnel
+  invocation here - cloudflared's own docs note it can default to binding
+  all interfaces in some virtualized/containerized environments, so this
+  isn't left to auto-detection.
+- **Management diagnostics** (`/debug/pprof` etc., reachable only via a
+  request routed *through* the tunnel by Cloudflare's dashboard, not
+  something cloudflared calls out for) are explicitly disabled -
+  `--management-diagnostics=false` - even though upstream defaults this
+  to `true`.
+- Every other outbound connection observed in the trace resolves to
+  `api.trycloudflare.com` (quick-tunnel provisioning) or Cloudflare's own
+  tunnel-edge discovery/connection infrastructure - both required for the
+  tunnel to function at all.
 
 ## Notes / limitations
 

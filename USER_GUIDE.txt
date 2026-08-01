@@ -75,6 +75,29 @@ Each transfer gets a fresh, random, disposable URL
 account and discarded after use.
 
 
+ON MACOS
+--------
+
+Newer macOS versions will probably block the downloaded binary
+outright. Apple requires developers to pay for a Developer ID before
+software can run without a warning, and this project isn't paying
+Apple for that.
+
+The recommended fix is to skip the direct download and install
+through Homebrew instead:
+
+    brew tap HitoriSensei/le-fi
+    brew install le-fi
+
+This builds le-fi from source on your machine and never hits the
+block in the first place.
+
+Would rather use the binary you already downloaded? Clear the
+quarantine flag macOS put on it:
+
+    xattr -d com.apple.quarantine ./le-fi
+
+
 IF SOMETHING GOES WRONG
 ------------------------
 

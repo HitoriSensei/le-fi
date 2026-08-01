@@ -95,13 +95,6 @@ func dispatchTwoArgs(channel, path string) int {
 func printHelp() {
 	fmt.Print(`le-fi - send or receive a file across NATs, no port forwarding
 
-Uses a Cloudflare Quick Tunnel (the same free, unauthenticated tunnels
-behind trycloudflare.com) to open a temporary public HTTPS endpoint to
-this machine - works through symmetric NAT/CGNAT, no account, no router
-config. Links cloudflared's own Go packages directly into this binary and
-drives them in-process, so no separate cloudflared executable needs to be
-installed anywhere.
-
 USAGE:
   Receive a file, waiting for someone to push it to you:
 
@@ -129,6 +122,13 @@ USAGE:
 
 FLAGS:
   -h, --help    Show this help and exit.
+
+Uses a Cloudflare Quick Tunnel (the same free, unauthenticated tunnels
+behind trycloudflare.com) to open a temporary public HTTPS endpoint to
+this machine - works through symmetric NAT/CGNAT, no account, no router
+config. Links cloudflared's own Go packages directly into this binary and
+drives them in-process, so no separate cloudflared executable needs to be
+installed anywhere.
 
 ATTRIBUTION:
   This tool statically links cloudflared, Copyright (c) Cloudflare, Inc.,

@@ -122,3 +122,37 @@ jobs:
             -H "Authorization: token ${GITEA_TOKEN}" \
             -F "attachment=@${ASSET_PATH};type=application/zip" \
             "${SERVER}/api/v1/repos/${REPO}/releases/${RELEASE_ID}/assets?name=${ASSET_NAME}"
+
+  # The homebrew-le-fi tap lives only on GitHub (github.com/HitoriSensei/
+  # homebrew-le-fi) - there's no Gitea copy to keep in sync, so this job
+  # updates that repo directly instead of mirroring one. The formula's
+  # `url` points at this repo's own source tarball regardless; only the
+  # tap file itself (Formula/le-fi.rb) is hosted elsewhere.
+  #
+  # Needs a GitHub personal access token with write access to that repo,
+  # added as a Gitea Actions secret on THIS repo named GH_MIRROR_TOKEN.
+  update-homebrew-tap:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute source tarball checksum and update the tap
+        env:
+          GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+          SERVER: ${{ gitea.server_url }}
+          REPO: ${{ gitea.repository }}
+          VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          set -e
+          TARBALL_URL="${SERVER}/${REPO}/archive/${VERSION}.tar.gz"
+          SHA256=$(curl -sfL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)
+
+          git clone -q "https://x-access-token:${GH_MIRROR_TOKEN}@github.com/HitoriSensei/homebrew-le-fi.git" tap
+          cd tap
+          sed -i "s#^  url \".*\"#  url \"${TARBALL_URL}\"#" Formula/le-fi.rb
+          sed -i "s#^  sha256 \".*\"#  sha256 \"${SHA256}\"#" Formula/le-fi.rb
+          git config user.email "actions@git.piesekpokojowy.uk"
+          git config user.name "le-fi release bot"
+          git add Formula/le-fi.rb
+          git diff --cached --quiet && { echo "no change, nothing to push"; exit 0; }
+          git commit -q -m "le-fi ${VERSION}"
+          git push -q

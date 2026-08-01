@@ -11,6 +11,22 @@ Imports cloudflared's own Go packages directly and drives them in-process
 executable. The receiving end also serves a small browser drop-zone UI
 for people with no tooling installed.
 
+## Installing
+
+**Linux:** grab `le-fi-<tag>-linux-amd64.zip` or `-linux-arm64.zip` from
+[Releases](https://git.piesekpokojowy.uk/Hitori/le-fi/releases).
+
+**macOS:** Homebrew is recommended - a downloaded binary will likely get
+blocked by Gatekeeper (see the macOS section below for why):
+
+```bash
+brew tap HitoriSensei/le-fi
+brew install le-fi
+```
+
+Or grab the `darwin-amd64`/`darwin-arm64` zip from Releases and clear the
+quarantine flag before using it: `xattr -d com.apple.quarantine le-fi`.
+
 ## Build
 
 ```bash
@@ -41,10 +57,9 @@ importantly a Cloudflare-maintained fork of `urfave/cli` and a fork of
 `quic-go`. **Go does not propagate a dependency's `replace` directives to
 downstream modules that import it.** Without mirroring them here, the
 build fails with `undefined: altsrc.ApplyInputSource` (found this the
-hard way while building this tool). The four lines are already in this
-`go.mod` — if you ever bump the cloudflared version, check
-[cloudflared's go.mod](https://github.com/cloudflare/cloudflared/blob/master/go.mod)
-for changes to these first.
+hard way). The four lines are already in this
+`go.mod` — if the cloudflared version is ever bumped, the
+[cloudflared's go.mod](https://github.com/cloudflare/cloudflared/blob/master/go.mod) needs to be checked for change in those lines.
 
 ## Usage
 
@@ -130,6 +145,28 @@ push to `main`, then builds the actual release-flagged binary
 (`CGO_ENABLED=0 -trimpath -ldflags="-s -w"`) and re-runs the whole suite
 against that real artifact via `LEFI_TEST_BIN=<path> go test ./...`.
 
+## macOS
+
+Newer macOS versions will very likely block a downloaded release binary
+outright. Gatekeeper requires software to be notarized through a paid
+Apple Developer ID ($99/year) before it'll run without a warning, and
+this project isn't paying Apple for that - see Installing above for the
+Homebrew/`xattr` workarounds.
+
+## Homebrew
+
+A tap lives at `github.com/HitoriSensei/homebrew-le-fi` - GitHub only, no
+Gitea copy, since a tap just needs to be somewhere `brew tap`'s short
+form resolves (GitHub) and its formula's `url` field points back at this
+repo's own release tarball regardless. Builds from source on install -
+`depends_on "go" => :build`, same `CGO_ENABLED=0` + stripped/trimmed
+flags as the release CI. Formula installs never set the quarantine
+attribute Gatekeeper checks for, so macOS's Apple-signing question
+doesn't come up at all for this path.
+
+The formula updates automatically on every release. Install command is
+in the Installing section above.
+
 ## Releases
 
 Pushing a tag matching `v*` (e.g. `git tag v0.1.0 && git push origin v0.1.0`)
@@ -143,13 +180,7 @@ each as its own release asset:
 - `le-fi-<tag>-darwin-amd64.zip`
 - `le-fi-<tag>-darwin-arm64.zip`
 
-Each zip contains the binary plus `USER_GUIDE.txt` — no source tree.
-
-No extra secrets are needed — it uses the Gitea-provided `GITEA_TOKEN`,
-scoped to this repo by the workflow's `permissions: contents: write`. The
-release itself is created once in a separate job that the four platform
-builds then upload their assets to, so the parallel matrix legs don't race
-each other trying to create the same release.
+Each zip contains the binary plus `USER_GUIDE.txt`.
 
 The build step downloads Go 1.26 directly (cloudflared's go.mod requires
 it) and caches `~/go/pkg/mod` / `~/.cache/go-build` per platform via
@@ -157,53 +188,16 @@ it) and caches `~/go/pkg/mod` / `~/.cache/go-build` per platform via
 transitive dependency tree (quic-go, grpc, OpenTelemetry, Sentry, etc.)
 that's slow to re-fetch from scratch on every run.
 
+The darwin builds are unsigned and unnotarized — see the macOS section
+above.
+
 Windows isn't built yet — the stderr-silencing trick (see below) currently
 relies on `golang.org/x/sys/unix`, which needs a Unix-style equivalent
 worked out for Windows before that target can be added.
 
 ## Telemetry
 
-None, by design. cloudflared does link in Sentry (crash reporting) and a
-local metrics server as part of its own codebase, so this was verified
-directly rather than assumed:
-
-- **Sentry**: `sentry.Init()` runs with Cloudflare's real DSN (it's
-  hardcoded in cloudflared, not something we can remove), but the only
-  code paths that would actually call `sentry.CaptureException` are gated
-  behind conditions this tool never triggers (FIPS mode, and file-based
-  TLS cert reloading - neither applies to quick tunnels). Confirmed with
-  an actual network trace (`strace -e trace=network`) during a real run:
-  Sentry's real IP never appears anywhere in the connection log.
-- **Metrics server**: cloudflared always starts a local Prometheus-style
-  metrics endpoint. It's forced to `127.0.0.1` explicitly in the tunnel
-  invocation here - cloudflared's own docs note it can default to binding
-  all interfaces in some virtualized/containerized environments, so this
-  isn't left to auto-detection.
-- **Management diagnostics** (`/debug/pprof` etc., reachable only via a
-  request routed *through* the tunnel by Cloudflare's dashboard, not
-  something cloudflared calls out for) are explicitly disabled -
-  `--management-diagnostics=false` - even though upstream defaults this
-  to `true`.
-- Every other outbound connection observed in the trace resolves to
-  `api.trycloudflare.com` (quick-tunnel provisioning) or Cloudflare's own
-  tunnel-edge discovery/connection infrastructure - both required for the
-  tunnel to function at all.
-- **Isolation from any existing cloudflared setup on this machine.**
-  Since cloudflared's code runs in-process, sharing this same OS
-  environment, it would otherwise auto-discover a real
-  `~/.cloudflared/config.yml` or pick up any `TUNNEL_*` env var left over
-  from someone's own separate cloudflared use - silently pulling in their
-  account credentials, ingress rules, or settings that have nothing to do
-  with an anonymous quick tunnel. `clearCloudflaredEnv()` (`tunnel.go`)
-  unsets every environment variable cloudflared's own flag definitions
-  recognize (extracted directly from its source, not guessed), and
-  `--config ""` / `--origincert ""` are passed explicitly to override
-  auto-discovery outright. Tested directly rather than just inferred
-  from reading the code: ran the tool against a deliberately hostile fake
-  `~/.cloudflared/config.yml` (bogus ingress rules, wrong URL, a metrics
-  port on all interfaces) plus conflicting `TUNNEL_*` env vars, including
-  one for the metrics port - it still came up as a normal, correct quick
-  tunnel, and the hostile port had nothing listening on it.
+None, by design.
 
 ## Notes / limitations
 

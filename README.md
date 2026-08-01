@@ -2,15 +2,20 @@
 
 *(a "file" walks into the portal on the right; "le" teleports out the left — le-fi)*
 
-Send/receive a piped file across NATs using a Cloudflare Quick Tunnel —
-**without the `cloudflared` binary installed anywhere.** This links
-cloudflared's own Go packages directly into this binary and drives them
-in-process (`cli.App.RunContext(...)`), instead of shelling out to a
-separate executable.
+Just want to send or receive a file? Grab a release and read
+`USER_GUIDE.txt` instead — this doc is for building it and poking
+around under the hood.
+
+Send or receive a file (or a whole directory) across NATs using a
+Cloudflare Quick Tunnel — **without the `cloudflared` binary installed
+anywhere.** This links cloudflared's own Go packages directly into this
+binary and drives them in-process (`cli.App.RunContext(...)`), instead of
+shelling out to a separate executable. The receiving end also serves a
+tiny browser drop-zone UI for people who don't have any tooling at all.
 
 Verified against real Cloudflare infrastructure: real quick tunnels
-provisioned, byte-perfect transfers confirmed via curl, wget, and the
-tool's own sender mode.
+provisioned, byte-perfect transfers confirmed via curl, wget, a browser,
+and the tool's own client/server modes in both directions.
 
 ## Build
 
@@ -49,47 +54,58 @@ for changes to these first.
 
 ## Usage
 
-Run `./le-fi -h` (or `--help`) any time for this same usage info from
-the binary itself. Running it bare with no arguments and nothing piped in
-either direction (i.e. just `./le-fi` typed directly into a terminal)
-also shows this help instead of silently opening a real tunnel.
+Run `./le-fi -h` (or `--help`) any time for this from the binary itself.
+Running it bare with no arguments and nothing piped either way also shows
+this help instead of silently opening a real tunnel.
 
-**Receiving end always starts the process:**
+### Receive a file
 
 ```bash
-./le-fi > out.bin
+le-fi > out.bin
 ```
 
-This prints something like:
+Waits for someone to push a file to you. Prints a curl/wget command, a
+`le-fi` command, and a plain link that opens a full-page drop zone in a
+browser - drag a file on, done, no tooling needed on their end at all.
+The drop zone shows your username@hostname so whoever's sending knows
+who they're sending to.
 
-```
-Tunnel is up (no account, no port forwarding - works through any NAT).
+Single-shot: closes after one transfer attempt, successful or not.
 
-If the remote party does NOT have this utility, they can send with:
+### Send a file
 
-  curl -T - https://idol-car-indication-behavior.trycloudflare.com/ < file_to_be_send.bin
-  wget --method=PUT --body-file=file_to_be_send.bin https://idol-car-indication-behavior.trycloudflare.com/ -O -
-
-If the remote party also has this utility, they can send with:
-
-  le-fi idol-car-indication-behavior < file_to_be_send.bin
-
-Channel name:
-
-  idol-car-indication-behavior
-
-Waiting for the transfer... (Ctrl+C to cancel)
+```bash
+le-fi < file_to_send.bin      # from a pipe
+le-fi file_to_send.bin        # from a path, real filename used
+le-fi a_directory/            # streamed as a .tar.gz, no temp file
 ```
 
-**Sending end**, three options depending on what they have:
+Waits for someone to pull the file from you - a curl/wget download, a
+browser opening the link directly, or another `le-fi` on the other end.
+Unlike receiving, this **stays up and waits for a retry** if a transfer
+drops mid-way; it only closes after one actually succeeds. Sending from a
+pipe buffers to a temp file first (streamed, not held in memory) so a
+failed attempt can be retried without needing to rewind stdin.
 
-- No utility, has curl → paste the curl line.
-- No utility, has wget → paste the wget line.
-- Also has this utility → `./le-fi <channel-name> < file_to_send.bin`
-  (this path needs no cloudflared library at all — it's a plain HTTPS PUT
-  to `https://<channel-name>.trycloudflare.com/`).
+### Talk to a channel you already have
 
-The tool exits automatically once the file is fully received, and tears
+```bash
+le-fi <channel-name> > out.bin           # pull from them
+le-fi <channel-name> < file_to_send.bin  # push to them
+le-fi <channel-name> file_to_send.bin    # same, no piping needed
+```
+
+Get the direction backwards - e.g. try to push to something that's
+actually offering to send - and le-fi detects it (via a response header
+both ends set) and tells you the fix instead of failing silently:
+
+```
+The other end is offering to SEND a file, not receive one.
+Did you mean: le-fi <channel-name> > out.bin
+...or just open https://<channel-name>.trycloudflare.com in a browser.
+```
+
+The tool exits automatically once a transfer is fully resolved, and tears
 down the tunnel cleanly (no lingering processes).
 
 ## Testing
@@ -106,6 +122,14 @@ since they skip the tunnel entirely:
   name (e.g. `le-fi 127.0.0.1:9000 < file`).
 - `LEFI_PORT=<port>` — receiver binds this exact port instead of a random
   one.
+
+Tests spawn the real binary as a subprocess with a genuine pseudo-terminal
+attached to whichever stream needs to look interactive (stdin for
+receive-like modes, stdout for send-like modes) rather than piped -
+matching what a real shell invocation looks like, which the dispatch
+logic in `main.go` depends on to tell the six usage patterns apart.
+`github.com/creack/pty` provides that; it's a test-only dependency and
+never gets linked into the shipped binary.
 
 `.gitea/workflows/test.yml` runs `go vet` and `go test -race` on every
 push to `main`, then builds the actual release-flagged binary
@@ -125,7 +149,7 @@ each as its own release asset:
 - `le-fi-<tag>-darwin-amd64.zip`
 - `le-fi-<tag>-darwin-arm64.zip`
 
-Each zip contains **just the binary** — no README, no source tree.
+Each zip contains the binary plus `USER_GUIDE.txt` — no source tree.
 
 No extra secrets are needed — it uses the Gitea-provided `GITEA_TOKEN`,
 scoped to this repo by the workflow's `permissions: contents: write`. The
@@ -170,11 +194,30 @@ directly rather than assumed:
   `api.trycloudflare.com` (quick-tunnel provisioning) or Cloudflare's own
   tunnel-edge discovery/connection infrastructure - both required for the
   tunnel to function at all.
+- **Isolation from any existing cloudflared setup on this machine.**
+  Since cloudflared's code runs in-process, sharing this same OS
+  environment, it would otherwise auto-discover a real
+  `~/.cloudflared/config.yml` or pick up any `TUNNEL_*` env var left over
+  from someone's own separate cloudflared use - silently pulling in their
+  account credentials, ingress rules, or settings that have nothing to do
+  with an anonymous quick tunnel. `clearCloudflaredEnv()` (`tunnel.go`)
+  unsets every environment variable cloudflared's own flag definitions
+  recognize (extracted directly from its source, not guessed), and
+  `--config ""` / `--origincert ""` are passed explicitly to override
+  auto-discovery outright. Verified for real, not just by reading the
+  code: ran the tool against a deliberately hostile fake
+  `~/.cloudflared/config.yml` (bogus ingress rules, wrong URL, a metrics
+  port on all interfaces) plus conflicting `TUNNEL_*` env vars, including
+  one for the metrics port - it still came up as a normal, correct quick
+  tunnel, and the hostile port had nothing listening on it.
 
 ## Notes / limitations
 
-- Single-shot: one file per run, then it exits. Run it again for another
-  transfer (you'll get a new random channel name each time).
+- One transfer per run, then it exits — except send-servers (`le-fi <
+  file`, `le-fi file`, `le-fi dir/`), which stay up and wait for a retry
+  if an attempt drops mid-transfer, only closing after one actually
+  succeeds. Run it again for another transfer either way (new random
+  channel name each time).
 - No auth on the endpoint while the tunnel is up — anyone who learns the
   URL before the transfer finishes could push data to it. Fine for a
   quick ad-hoc handoff between two parties who already know the address,

@@ -1,7 +1,7 @@
 # Builds the le-fi binary for linux/amd64, linux/arm64, darwin/amd64,
 # and darwin/arm64 (on the ubuntu-latest act_runner label, cross-compiled -
 # Go needs no per-target toolchain for these combinations) and publishes
-# each as a release asset containing just the binary.
+# each as a release asset containing the binary plus USER_GUIDE.txt.
 #
 # Trigger: push a tag matching v* (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
 #
@@ -97,13 +97,14 @@ jobs:
           export PATH="/usr/local/go/bin:$PATH"
           go build -trimpath -ldflags="-s -w" -o le-fi .
 
-      - name: Package binary-only zip
+      - name: Package release zip
         run: |
           set -e
           STAGE="le-fi-${{ needs.create-release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
           mkdir -p dist
-          # -j (junk paths): the zip contains just the binary, no directory entries.
-          zip -qj "dist/${STAGE}.zip" le-fi
+          # -j (junk paths): the zip contains just the binary and the
+          # user guide, no directory entries, no source tree.
+          zip -qj "dist/${STAGE}.zip" le-fi USER_GUIDE.txt
           {
             echo "ASSET_PATH=dist/${STAGE}.zip"
             echo "ASSET_NAME=${STAGE}.zip"

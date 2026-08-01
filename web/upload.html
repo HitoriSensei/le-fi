@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>le-fi - send a file</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #0f1115;
+    color: #e8e8ea;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .dropzone {
+    position: fixed;
+    inset: 22px;
+    border: 3px dashed #4a4f5c;
+    border-radius: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+    padding: 24px;
+  }
+  .dropzone:hover {
+    border-color: #6a7182;
+  }
+  .dropzone.drag {
+    border-color: #f6821f;
+    background: rgba(246, 130, 31, 0.06);
+  }
+  .icon {
+    width: 64px;
+    height: 64px;
+    stroke: #8b91a0;
+    transition: stroke .15s ease;
+  }
+  .dropzone.drag .icon, .dropzone:hover .icon {
+    stroke: #f6821f;
+  }
+  .target {
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+  .target .to {
+    font-weight: 400;
+    color: #9ba0ac;
+  }
+  .notice {
+    font-size: 1rem;
+    color: #9ba0ac;
+    max-width: 32em;
+  }
+  .status {
+    font-size: 1rem;
+    min-height: 1.4em;
+  }
+  .status.uploading { color: #f6821f; }
+  .status.ok { color: #4caf6d; }
+  .status.err { color: #e05555; }
+  progress {
+    width: 260px;
+    height: 8px;
+    accent-color: #f6821f;
+  }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+
+<div class="dropzone" id="dropzone">
+  <svg class="icon" id="icon" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v12"/>
+    <path d="M7 10l5 5 5-5"/>
+    <path d="M4 19h16"/>
+  </svg>
+  <div class="target">Sending to <span class="to">{{.Identity}}</span></div>
+  <div class="notice" id="notice">Drop a file here, or click anywhere to select one. The transfer starts right away.</div>
+  <div class="status" id="status"></div>
+  <progress id="progress" max="100" value="0" style="display:none"></progress>
+  <input type="file" id="fileInput">
+</div>
+
+<script>
+(function () {
+  var dropzone = document.getElementById('dropzone');
+  var fileInput = document.getElementById('fileInput');
+  var statusEl = document.getElementById('status');
+  var noticeEl = document.getElementById('notice');
+  var progressEl = document.getElementById('progress');
+  var busy = false;
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  function upload(file) {
+    if (busy || !file) return;
+    busy = true;
+    noticeEl.style.display = 'none';
+    progressEl.style.display = '';
+    progressEl.value = 0;
+    setStatus('Sending ' + file.name + '...', 'uploading');
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/', true);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        progressEl.value = Math.round((e.loaded / e.total) * 100);
+      }
+    };
+    xhr.onload = function () {
+      progressEl.style.display = 'none';
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setStatus('Sent. Thanks!', 'ok');
+      } else {
+        busy = false;
+        noticeEl.style.display = '';
+        setStatus('Failed: ' + (xhr.responseText || xhr.status), 'err');
+      }
+    };
+    xhr.onerror = function () {
+      busy = false;
+      progressEl.style.display = 'none';
+      noticeEl.style.display = '';
+      setStatus('Connection error - the link may have expired.', 'err');
+    };
+    xhr.send(file);
+  }
+
+  dropzone.addEventListener('click', function () {
+    if (!busy) fileInput.click();
+  });
+  fileInput.addEventListener('change', function (e) {
+    if (e.target.files.length) upload(e.target.files[0]);
+  });
+  dropzone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    dropzone.classList.add('drag');
+  });
+  dropzone.addEventListener('dragleave', function () {
+    dropzone.classList.remove('drag');
+  });
+  dropzone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if (e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,109 @@
+le-fi - send a file to someone, anywhere
+==========================================
+
+le-fi sends a file (or a whole folder) straight from your computer to
+someone else's, even if you're both sitting behind home routers or
+office firewalls. No account, no signup, no cloud storage in the
+middle. The other person doesn't even need this program - a web
+browser is enough.
+
+
+RECEIVING A FILE
+----------------
+
+1. Open a terminal (Command Prompt / PowerShell on Windows, Terminal
+   on Mac, your usual shell on Linux).
+
+2. Type this, replacing "myfile.zip" with whatever you want to call
+   the file you're about to receive:
+
+       ./le-fi > myfile.zip
+
+3. Wait a few seconds. le-fi prints a web address plus a couple of
+   ready-to-copy commands.
+
+4. Send those to whoever is sending you the file - text message,
+   email, chat, however you'd normally talk to them.
+
+5. They open the link in a browser and drop the file onto the page
+   (or paste in the command you sent them). Either way, it streams
+   straight to you, and le-fi tells you when it's done.
+
+
+SENDING A FILE
+---------------
+
+Two ways to do this:
+
+A) Someone sent YOU instructions already - just copy-paste whatever
+   command they gave you into your terminal and hit enter.
+
+B) You're starting the send yourself:
+
+       ./le-fi myfile.zip          send a single file
+       ./le-fi my-folder/          send a whole folder (zipped up
+                                    automatically on the way out)
+       ./le-fi < myfile.zip        same as the first, piped in
+
+   le-fi prints a link. Send it to the other person - they can open
+   it directly in a browser to download the file, or use a command
+   you give them. If their download drops partway through for any
+   reason, le-fi keeps waiting so they can just try again - it only
+   shuts down once the file has actually gone through successfully.
+
+
+IS THIS SAFE?
+-------------
+
+Yes, with one thing worth knowing.
+
+The connection is encrypted the whole way - the same kind of HTTPS
+encryption your browser uses for online banking. Nobody snooping on
+the network between you two can read the file as it travels.
+
+If both people are using le-fi (not curl or a browser), it also
+automatically double-checks that the file arrived byte-for-byte
+identical to what was sent, kind of like a delivery confirmation, and
+will loudly say so if even a single byte got corrupted along the way.
+
+The one thing to know: the web address le-fi prints works for anyone
+who has it, for as long as the transfer stays open (usually well
+under a minute). Don't post it somewhere public - treat it like a
+one-time-use link, because that's exactly what it is. Receiving and
+browser-downloads stop working the moment the transfer finishes, and
+you can always press Ctrl+C to shut things down early if you change
+your mind.
+
+le-fi doesn't have accounts, doesn't phone home, and doesn't send
+crash reports, usage stats, or anything else about you or your files
+anywhere. This wasn't just assumed - it was checked directly by
+watching every single network connection the program makes while it
+runs.
+
+
+WHAT'S ACTUALLY HAPPENING
+--------------------------
+
+le-fi rides on Cloudflare's real, genuine global network - the same
+"Quick Tunnel" feature Cloudflare gives away for free through their
+own official tool. le-fi simply has that ability built directly in,
+so there's nothing extra to install to get it.
+
+Every transfer gets its own brand new, random, disposable web address
+(something like "https://some-random-words.trycloudflare.com"). It's
+not tied to any account and gets thrown away right after use.
+
+
+IF SOMETHING GOES WRONG
+------------------------
+
+- First attempt at connecting fails right away? Wait a few seconds
+  and try again - a freshly created address needs a moment to switch
+  on across Cloudflare's network.
+
+- Typed the command backwards (tried to send to something that's
+  actually waiting to send, or the other way around)? le-fi notices
+  and tells you the exact fix to use instead.
+
+- Each run handles exactly one transfer. Need to send or receive
+  again? Just run le-fi again - you'll get a new address each time.

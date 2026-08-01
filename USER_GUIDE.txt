@@ -1,11 +1,15 @@
-le-fi - send a file to someone, anywhere
-==========================================
+le-fi - send or receive a file, anywhere
+========================================
 
-le-fi sends a file (or a whole folder) straight from your computer to
-someone else's, even if you're both sitting behind home routers or
-office firewalls. No account, no signup, no cloud storage in the
-middle. The other person doesn't even need this program - a web
-browser is enough.
+le-fi transfers a file (or a whole folder) straight between two
+computers, in either direction, even if you're both sitting behind
+home routers or office firewalls. No account, no signup, no cloud
+storage in the middle.
+
+The person on the other end doesn't need to install anything at all.
+A web browser is enough - or, if they're comfortable with a terminal,
+a plain "curl" or "wget" command works too. Nothing to download, no
+account to create, nothing left behind afterward.
 
 
 RECEIVING A FILE
@@ -23,11 +27,14 @@ RECEIVING A FILE
    ready-to-copy commands.
 
 4. Send those to whoever is sending you the file - text message,
-   email, chat, however you'd normally talk to them.
+   email, chat, however you'd normally talk to them. They don't need
+   le-fi, or anything else installed - just one of the options you
+   send them.
 
-5. They open the link in a browser and drop the file onto the page
-   (or paste in the command you sent them). Either way, it streams
-   straight to you, and le-fi tells you when it's done.
+5. They open the link in a browser and drop the file onto the page,
+   or paste in one of the commands you sent them (curl, wget, or
+   le-fi if they happen to have it too). Any of those work. The file
+   streams straight to you, and le-fi tells you when it's done.
 
 
 SENDING A FILE
@@ -45,11 +52,13 @@ B) You're starting the send yourself:
                                     automatically on the way out)
        ./le-fi < myfile.zip        same as the first, piped in
 
-   le-fi prints a link. Send it to the other person - they can open
-   it directly in a browser to download the file, or use a command
-   you give them. If their download drops partway through for any
-   reason, le-fi keeps waiting so they can just try again - it only
-   shuts down once the file has actually gone through successfully.
+   le-fi prints a link. Send it to the other person - no installs
+   needed on their end. They can open it directly in a browser to
+   download the file, run a curl/wget command you give them, or use
+   le-fi too if they happen to have it. If their download drops
+   partway through for any reason, le-fi keeps waiting so they can
+   just try again - it only shuts down once the file has actually
+   gone through successfully.
 
 
 IS THIS SAFE?

@@ -1,118 +1,89 @@
 le-fi - send or receive a file, anywhere
 ========================================
 
-le-fi transfers a file (or a whole folder) straight between two
-computers, in either direction, even if you're both sitting behind
-home routers or office firewalls. No account, no signup, no cloud
-storage in the middle.
+le-fi sends a file (or a folder) directly between two computers, in
+either direction, even behind NAT or a firewall. No account, no
+signup, no cloud storage in the middle. Sending a file copies it -
+nothing is deleted or moved on your end.
 
-The person on the other end doesn't need to install anything at all.
-A web browser is enough - or, if they're comfortable with a terminal,
-a plain "curl" or "wget" command works too. Nothing to download, no
-account to create, nothing left behind afterward.
+The other person doesn't need to install anything: a browser is
+enough, or curl/wget if they'd rather use a terminal.
 
 
 RECEIVING A FILE
 ----------------
 
-1. Open a terminal (Command Prompt / PowerShell on Windows, Terminal
-   on Mac, your usual shell on Linux).
+1. Open a terminal.
 
-2. Type this, replacing "myfile.zip" with whatever you want to call
-   the file you're about to receive:
+2. Run this, naming the file you're about to receive:
 
        ./le-fi > myfile.zip
 
-3. Wait a few seconds. le-fi prints a web address plus a couple of
-   ready-to-copy commands.
+3. le-fi prints a URL plus ready-to-paste curl/wget/le-fi commands.
 
-4. Send those to whoever is sending you the file - text message,
-   email, chat, however you'd normally talk to them. They don't need
-   le-fi, or anything else installed - just one of the options you
-   send them.
+4. Send those to whoever's sending you the file, however you'd
+   normally reach them.
 
-5. They open the link in a browser and drop the file onto the page,
-   or paste in one of the commands you sent them (curl, wget, or
-   le-fi if they happen to have it too). Any of those work. The file
-   streams straight to you, and le-fi tells you when it's done.
+5. They open the link in a browser and drop the file on, or run one
+   of the commands you sent. Either way it streams straight to you,
+   and le-fi tells you when it's done.
 
 
 SENDING A FILE
----------------
+--------------
 
-Two ways to do this:
+Already got a command from someone? Paste it in and run it.
 
-A) Someone sent YOU instructions already - just copy-paste whatever
-   command they gave you into your terminal and hit enter.
+Starting the send yourself:
 
-B) You're starting the send yourself:
-
-       ./le-fi myfile.zip          send a single file
-       ./le-fi my-folder/          send a whole folder (zipped up
-                                    automatically on the way out)
+       ./le-fi myfile.zip          a single file
+       ./le-fi my-folder/          a folder, sent as a .tar.gz
        ./le-fi < myfile.zip        same as the first, piped in
 
-   le-fi prints a link. Send it to the other person - no installs
-   needed on their end. They can open it directly in a browser to
-   download the file, run a curl/wget command you give them, or use
-   le-fi too if they happen to have it. If their download drops
-   partway through for any reason, le-fi keeps waiting so they can
-   just try again - it only shuts down once the file has actually
-   gone through successfully.
+le-fi prints a link - send it over. The other person can open it in a
+browser, use curl/wget, or use le-fi if they have it. If a download
+drops mid-transfer, le-fi keeps waiting for a retry; it only exits
+once a transfer actually succeeds.
 
 
 IS THIS SAFE?
 -------------
 
-Yes, with one thing worth knowing.
+The connection is HTTPS-encrypted end to end. If both sides are using
+le-fi, it also checksums the transfer and flags any mismatch.
 
-The connection is encrypted the whole way - the same kind of HTTPS
-encryption your browser uses for online banking. Nobody snooping on
-the network between you two can read the file as it travels.
+The one real thing to know: the URL le-fi prints works for anyone who
+has it, for as long as the transfer window stays open (usually well
+under a minute). Don't post it publicly - treat it as a one-time
+link. It stops working once the transfer completes, or Ctrl+C ends it
+early.
 
-If both people are using le-fi (not curl or a browser), it also
-automatically double-checks that the file arrived byte-for-byte
-identical to what was sent, kind of like a delivery confirmation, and
-will loudly say so if even a single byte got corrupted along the way.
-
-The one thing to know: the web address le-fi prints works for anyone
-who has it, for as long as the transfer stays open (usually well
-under a minute). Don't post it somewhere public - treat it like a
-one-time-use link, because that's exactly what it is. Receiving and
-browser-downloads stop working the moment the transfer finishes, and
-you can always press Ctrl+C to shut things down early if you change
-your mind.
-
-le-fi doesn't have accounts, doesn't phone home, and doesn't send
-crash reports, usage stats, or anything else about you or your files
-anywhere. This wasn't just assumed - it was checked directly by
-watching every single network connection the program makes while it
-runs.
+No accounts, no phoning home, no crash reports or usage stats sent
+anywhere - confirmed by watching every network connection le-fi
+makes, not just assumed.
 
 
 WHAT'S ACTUALLY HAPPENING
 --------------------------
 
-le-fi rides on Cloudflare's real, genuine global network - the same
-"Quick Tunnel" feature Cloudflare gives away for free through their
-own official tool. le-fi simply has that ability built directly in,
-so there's nothing extra to install to get it.
+le-fi uses Cloudflare's Quick Tunnel feature, the same one Cloudflare
+gives away for free through their own cloudflared tool - built in
+here directly, so there's nothing extra to install.
 
-Every transfer gets its own brand new, random, disposable web address
-(something like "https://some-random-words.trycloudflare.com"). It's
-not tied to any account and gets thrown away right after use.
+Each transfer gets a fresh, random, disposable URL
+(https://some-random-words.trycloudflare.com), unrelated to any
+account and discarded after use.
 
 
 IF SOMETHING GOES WRONG
 ------------------------
 
-- First attempt at connecting fails right away? Wait a few seconds
-  and try again - a freshly created address needs a moment to switch
-  on across Cloudflare's network.
+- First connection attempt fails outright? Wait a few seconds and
+  retry - a freshly created address takes a moment to propagate
+  across Cloudflare's network.
 
-- Typed the command backwards (tried to send to something that's
-  actually waiting to send, or the other way around)? le-fi notices
-  and tells you the exact fix to use instead.
+- Got the direction backwards (pushed to something waiting to send,
+  or the reverse)? le-fi detects it and prints the fix.
 
-- Each run handles exactly one transfer. Need to send or receive
-  again? Just run le-fi again - you'll get a new address each time.
+- One transfer per run. Run le-fi again for another - you'll get a
+  new address each time.

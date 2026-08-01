@@ -1,21 +1,15 @@
 # le-fi
 
-*(a "file" walks into the portal on the right; "le" teleports out the left — le-fi)*
-
 Just want to send or receive a file? Grab a release and read
 `USER_GUIDE.txt` instead — this doc is for building it and poking
 around under the hood.
 
-Send or receive a file (or a whole directory) across NATs using a
-Cloudflare Quick Tunnel — **without the `cloudflared` binary installed
-anywhere.** This links cloudflared's own Go packages directly into this
-binary and drives them in-process (`cli.App.RunContext(...)`), instead of
-shelling out to a separate executable. The receiving end also serves a
-tiny browser drop-zone UI for people who don't have any tooling at all.
-
-Verified against real Cloudflare infrastructure: real quick tunnels
-provisioned, byte-perfect transfers confirmed via curl, wget, a browser,
-and the tool's own client/server modes in both directions.
+Sends or receives a file (or a directory) across NATs using a Cloudflare
+Quick Tunnel, without the `cloudflared` binary installed anywhere.
+Imports cloudflared's own Go packages directly and drives them in-process
+(`cli.App.RunContext(...)`) instead of shelling out to a separate
+executable. The receiving end also serves a small browser drop-zone UI
+for people with no tooling installed.
 
 ## Build
 
@@ -204,8 +198,8 @@ directly rather than assumed:
   unsets every environment variable cloudflared's own flag definitions
   recognize (extracted directly from its source, not guessed), and
   `--config ""` / `--origincert ""` are passed explicitly to override
-  auto-discovery outright. Verified for real, not just by reading the
-  code: ran the tool against a deliberately hostile fake
+  auto-discovery outright. Tested directly rather than just inferred
+  from reading the code: ran the tool against a deliberately hostile fake
   `~/.cloudflared/config.yml` (bogus ingress rules, wrong URL, a metrics
   port on all interfaces) plus conflicting `TUNNEL_*` env vars, including
   one for the metrics port - it still came up as a normal, correct quick

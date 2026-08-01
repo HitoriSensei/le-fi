@@ -25,7 +25,7 @@ blocked by Gatekeeper (see the macOS section below for why):
 
 ```bash
 brew tap HitoriSensei/le-fi
-brew trust hitorisensei/le-fi
+brew trust HitoriSensei/le-fi
 brew install le-fi
 ```
 

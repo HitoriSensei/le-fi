@@ -138,7 +138,7 @@ jobs:
       - name: Compute source tarball checksum and update the tap
         env:
           GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
-          SERVER: ${{ env.REPO_SERVER_PUBLIC_URL }}
+          SERVER: ${{ vars.REPO_SERVER_PUBLIC_URL }}
           REPO: ${{ gitea.repository }}
           VERSION: ${{ needs.create-release.outputs.version }}
         run: |

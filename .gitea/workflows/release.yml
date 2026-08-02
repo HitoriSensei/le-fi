@@ -8,6 +8,12 @@
 # Two jobs: create-release runs once and creates the Gitea release, then
 # build runs as a matrix and uploads one asset per platform to it. Splitting
 # these avoids every matrix leg racing to create the same release.
+#
+# Requires a repo-level Actions variable REPO_SERVER_PUBLIC_URL set to
+# this repo's publicly reachable Gitea URL - gitea.server_url isn't used
+# because it can resolve to an internal address the runner sees but
+# nothing outside it (like GitHub, fetching the tarball for the Homebrew
+# formula, or an end user clicking a link) can actually reach.
 
 name: release
 
@@ -37,12 +43,31 @@ jobs:
         run: |
           set -e
           VERSION="${GITHUB_REF_NAME}"
-          RELEASE_ID=$(curl -sf -X POST \
+
+          # Idempotent: a rerun (e.g. after fixing a build failure) hits
+          # the same tag again. Reuse the existing release if there is
+          # one instead of failing on a duplicate-tag conflict.
+          EXISTING_STATUS=$(curl -s -o /tmp/existing.json -w "%{http_code}" \
             -H "Authorization: token ${GITEA_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "${SERVER}/api/v1/repos/${REPO}/releases" \
-            -d "{\"tag_name\":\"${VERSION}\",\"name\":\"${VERSION}\",\"body\":\"Linux and macOS builds (amd64/arm64).\",\"draft\":false,\"prerelease\":false}" \
-            | jq -r .id)
+            "${SERVER}/api/v1/repos/${REPO}/releases/tags/${VERSION}")
+
+          if [ "$EXISTING_STATUS" = "200" ]; then
+            RELEASE_ID=$(jq -r .id /tmp/existing.json)
+            echo "release ${VERSION} already exists (id=${RELEASE_ID}), reusing it"
+          else
+            HTTP_STATUS=$(curl -s -o /tmp/created.json -w "%{http_code}" -X POST \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "${SERVER}/api/v1/repos/${REPO}/releases" \
+              -d "{\"tag_name\":\"${VERSION}\",\"name\":\"${VERSION}\",\"body\":\"Linux and macOS builds (amd64/arm64).\",\"draft\":false,\"prerelease\":false}")
+            if [ "$HTTP_STATUS" -ge 300 ]; then
+              echo "release creation failed (HTTP ${HTTP_STATUS}):" >&2
+              cat /tmp/created.json >&2
+              exit 1
+            fi
+            RELEASE_ID=$(jq -r .id /tmp/created.json)
+          fi
+
           echo "release_id=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
@@ -132,7 +157,7 @@ jobs:
   # Needs a GitHub personal access token with write access to that repo,
   # added as a Gitea Actions secret on THIS repo named GH_MIRROR_TOKEN.
   update-homebrew-tap:
-    needs: create-release
+    needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
       - name: Compute source tarball checksum and update the tap

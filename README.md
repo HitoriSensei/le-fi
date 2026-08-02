@@ -13,19 +13,14 @@ for people with no tooling installed.
 
 ## Installing
 
-### Linux
-
-grab `le-fi-<tag>-linux-amd64.zip` or `-linux-arm64.zip` from
+**Linux:** grab `le-fi-<tag>-linux-amd64.zip` or `-linux-arm64.zip` from
 [Releases](https://git.piesekpokojowy.uk/Hitori/le-fi/releases).
 
-### macOS
-
-Homebrew is recommended - a downloaded binary will likely get
+**macOS:** Homebrew is recommended - a downloaded binary will likely get
 blocked by Gatekeeper (see the macOS section below for why):
 
 ```bash
 brew tap HitoriSensei/le-fi
-brew trust HitoriSensei/le-fi
 brew install le-fi
 ```
 
@@ -96,10 +91,14 @@ le-fi a_directory/            # streamed as a .tar.gz, no temp file
 
 Waits for someone to pull the file from you - a curl/wget download, a
 browser opening the link directly, or another `le-fi` on the other end.
-Unlike receiving, this **stays up and waits for a retry** if a transfer
-drops mid-way; it only closes after one actually succeeds. Sending from a
-pipe buffers to a temp file first (streamed, not held in memory) so a
-failed attempt can be retried without needing to rewind stdin.
+
+Sending a real file or directory **stays up and waits for a retry** if a
+transfer drops mid-way; it only closes after one actually succeeds (the
+directory case just re-runs the `tar.gz` streaming from scratch).
+
+Piped stdin is the one exception: it's streamed straight through with
+nothing buffered to disk or memory, so a dropped connection has nothing
+left to retry from - the process just reports the failure and exits.
 
 ### Talk to a channel you already have
 
@@ -206,11 +205,13 @@ None, by design.
 
 ## Notes / limitations
 
-- One transfer per run, then it exits — except send-servers (`le-fi <
-  file`, `le-fi file`, `le-fi dir/`), which stay up and wait for a retry
-  if an attempt drops mid-transfer, only closing after one actually
-  succeeds. Run it again for another transfer either way (new random
-  channel name each time).
+- One transfer per run, then it exits — except sending a real file or
+  directory (`le-fi file`, `le-fi dir/`), which stays up and waits for a
+  retry if an attempt drops mid-transfer, only closing after one
+  actually succeeds. Piped stdin (`le-fi < file`) doesn't retry - nothing
+  is buffered, so there's nothing left to retry from once a drop happens.
+  Run it again for another transfer either way (new random channel name
+  each time).
 - No auth on the endpoint while the tunnel is up — anyone who learns the
   URL before the transfer finishes could push data to it. Fine for a
   quick ad-hoc handoff between two parties who already know the address,

@@ -596,6 +596,57 @@ func TestSendServer_RetryAfterDrop(t *testing.T) {
 	}
 }
 
+// TestSendStdin_NoRetryAfterDrop confirms piped-stdin sends are the one
+// exception to the retry-on-drop behavior above: since the data is
+// streamed directly with nothing buffered to disk or memory, a dropped
+// connection has nothing left to retry from, so the process must exit
+// immediately instead of waiting for another attempt.
+func TestSendStdin_NoRetryAfterDrop(t *testing.T) {
+	port := freePort(t)
+	payload := randomBytes(t, 20*1024*1024)
+
+	tmpBefore, err := filepath.Glob(filepath.Join(os.TempDir(), "le-fi-send-*"))
+	if err != nil {
+		t.Fatalf("glob failed: %v", err)
+	}
+
+	send := spawnPtyStdout(t, nil, bytes.NewReader(payload), localEnv(port)...)
+	defer send.cleanup()
+	waitForPort(t, port, 5*time.Second)
+
+	// Drop the connection mid-transfer.
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+	_, _ = conn.Write([]byte("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"))
+	buf := make([]byte, 65536)
+	_, _ = conn.Read(buf)
+	conn.Close()
+
+	err = send.cmd.Wait()
+	if err == nil {
+		t.Fatalf("expected the sender to exit non-zero after a dropped connection - piped stdin can't be retried")
+	}
+	if !strings.Contains(send.stderr.String(), "no retry for piped input") {
+		t.Errorf("expected a no-retry message, got:\n%s", send.stderr.String())
+	}
+
+	// The process already exited (single attempt, no retry) - a second
+	// GET should simply fail to connect, not receive anything.
+	if _, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port)); err == nil {
+		t.Errorf("expected a second GET to fail (server should have exited), but it succeeded")
+	}
+
+	tmpAfter, err := filepath.Glob(filepath.Join(os.TempDir(), "le-fi-send-*"))
+	if err != nil {
+		t.Fatalf("glob failed: %v", err)
+	}
+	if len(tmpAfter) > len(tmpBefore) {
+		t.Errorf("expected no temp file to be created for a piped-stdin send, found: %v", tmpAfter)
+	}
+}
+
 // ---------------------------------------------------------------------
 // Role mismatch detection
 // ---------------------------------------------------------------------

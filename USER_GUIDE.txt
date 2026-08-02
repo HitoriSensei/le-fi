@@ -38,12 +38,17 @@ Starting the send yourself:
 
        ./le-fi myfile.zip          a single file
        ./le-fi my-folder/          a folder, sent as a .tar.gz
-       ./le-fi < myfile.zip        same as the first, piped in
+       ./le-fi < myfile.zip        piped in instead of a path
 
 le-fi prints a link - send it over. The other person can open it in a
-browser, use curl/wget, or use le-fi if they have it. If a download
-drops mid-transfer, le-fi keeps waiting for a retry; it only exits
-once a transfer actually succeeds.
+browser, use curl/wget, or use le-fi if they have it.
+
+Sending a file or folder by path keeps waiting if a download drops
+mid-transfer, so the other person can just try again - it only exits
+once a transfer actually succeeds. Piping a file in is the one
+exception: it streams straight through with nothing saved anywhere,
+so a dropped connection can't be retried - that one just stops and
+reports the failure.
 
 
 IS THIS SAFE?

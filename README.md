@@ -13,14 +13,19 @@ for people with no tooling installed.
 
 ## Installing
 
-**Linux:** grab `le-fi-<tag>-linux-amd64.zip` or `-linux-arm64.zip` from
+### Linux
+
+Grab `le-fi-<tag>-linux-<arch>.zip` from
 [Releases](https://git.piesekpokojowy.uk/Hitori/le-fi/releases).
 
-**macOS:** Homebrew is recommended - a downloaded binary will likely get
+### macOS
+
+Homebrew is recommended - a downloaded binary will likely get
 blocked by Gatekeeper (see the macOS section below for why):
 
 ```bash
 brew tap HitoriSensei/le-fi
+brew trust HitoriSensei/le-fi
 brew install le-fi
 ```
 

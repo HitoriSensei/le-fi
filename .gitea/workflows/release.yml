@@ -32,7 +32,7 @@ jobs:
         id: create
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-          SERVER: ${{ gitea.server_url }}
+          SERVER: ${{ vars.REPO_SERVER_PUBLIC_URL }}
           REPO: ${{ gitea.repository }}
         run: |
           set -e
@@ -113,7 +113,7 @@ jobs:
       - name: Upload release asset
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-          SERVER: ${{ gitea.server_url }}
+          SERVER: ${{ vars.REPO_SERVER_PUBLIC_URL }}
           REPO: ${{ gitea.repository }}
           RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
         run: |

@@ -1,9 +1,5 @@
 # le-fi
 
-Just want to send or receive a file? Grab a release and read
-`USER_GUIDE.txt` instead — this doc is for building it and poking
-around under the hood.
-
 Sends or receives a file (or a directory) across NATs using a Cloudflare
 Quick Tunnel, without the `cloudflared` binary installed anywhere.
 Imports cloudflared's own Go packages directly and drives them in-process

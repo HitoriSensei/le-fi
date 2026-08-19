@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -66,7 +67,22 @@ func runClientSend(channel string, body io.Reader) int {
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Trailer = http.Header{crc32TrailerHeader: nil}
 
-	client := &http.Client{Timeout: 0}
+	// Force HTTP/1.1: the request carries a trailer (the CRC-32 checksum,
+	// only known once the body's fully read), and some TLS-inspecting
+	// corporate proxies/VPN clients mishandle the HTTP/2 trailer HEADERS
+	// frame that comes after the DATA frames, killing the connection with
+	// an immediate GOAWAY(PROTOCOL_ERROR) before any real response - seen
+	// in the wild on macOS behind such a proxy. HTTP/2 buys nothing here
+	// (a single PUT, no multiplexing), so just avoid the whole class of
+	// bugs: chunked-encoding trailers over HTTP/1.1 are much more widely
+	// supported by middleboxes.
+	client := &http.Client{
+		Timeout: 0,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{NextProtos: []string{"http/1.1"}},
+			TLSNextProto:    map[string]func(string, *tls.Conn) http.RoundTripper{},
+		},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error sending file:", err)

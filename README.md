@@ -160,14 +160,8 @@ Homebrew/`xattr` workarounds.
 
 ## Homebrew
 
-A tap lives at `github.com/HitoriSensei/homebrew-le-fi` - GitHub only, no
-Gitea copy, since a tap just needs to be somewhere `brew tap`'s short
-form resolves (GitHub) and its formula's `url` field points back at this
-repo's own release tarball regardless. Builds from source on install -
-`depends_on "go" => :build`, same `CGO_ENABLED=0` + stripped/trimmed
-flags as the release CI. Formula installs never set the quarantine
-attribute Gatekeeper checks for, so macOS's Apple-signing question
-doesn't come up at all for this path.
+Formula installs never set the quarantine attribute Gatekeeper checks for,
+so macOS's Apple-signing question doesn't come up at all for this path.
 
 The formula updates automatically on every release. Install command is
 in the Installing section above.

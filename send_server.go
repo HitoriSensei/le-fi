@@ -32,7 +32,12 @@ type sourceProvider func() (io.ReadCloser, error)
 // immediately, and a guard ensures only one request ever gets to read
 // the source at all - without it, two concurrent GET requests could race
 // to read the same underlying pipe and corrupt both transfers.
-func runSendServer(filename string, size int64, provider sourceProvider, retry bool) int {
+//
+// When password is non-empty, every GET/HEAD must carry HTTP basic auth
+// with that password (any username). A request that fails auth gets a 401
+// and is otherwise ignored: it doesn't count as an attempt (so it can't
+// use up piped stdin's single shot) and never ends the send.
+func runSendServer(filename string, size int64, provider sourceProvider, retry bool, password string) int {
 	ui, restore := silenceStderrKeepingCopy()
 	defer restore()
 
@@ -50,6 +55,11 @@ func runSendServer(filename string, size int64, provider sourceProvider, retry b
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "use GET\n", http.StatusMethodNotAllowed)
+			return
+		}
+		// Before anything below touches the transfer state: a failed
+		// login must leave the send exactly as it was.
+		if !checkBasicAuth(w, r, password) {
 			return
 		}
 
@@ -92,8 +102,15 @@ func runSendServer(filename string, size int64, provider sourceProvider, retry b
 
 	fmt.Fprintln(ui, "If the remote party does NOT have this utility, they can receive with:")
 	fmt.Fprintln(ui)
-	fmt.Fprintf(ui, "  curl -OJ %s\n", sess.url)
-	fmt.Fprintf(ui, "  wget --content-disposition %s\n", sess.url)
+	if password != "" {
+		// -u without ":password" / --ask-password make curl and wget
+		// prompt for it, so the password isn't echoed here.
+		fmt.Fprintf(ui, "  curl -u %s -OJ %s\n", basicAuthUser, sess.url)
+		fmt.Fprintf(ui, "  wget --user=%s --ask-password --content-disposition %s\n", basicAuthUser, sess.url)
+	} else {
+		fmt.Fprintf(ui, "  curl -OJ %s\n", sess.url)
+		fmt.Fprintf(ui, "  wget --content-disposition %s\n", sess.url)
+	}
 	fmt.Fprintln(ui)
 	fmt.Fprintln(ui, "...or just open this link in a browser to download it directly:")
 	fmt.Fprintln(ui)
@@ -103,6 +120,11 @@ func runSendServer(filename string, size int64, provider sourceProvider, retry b
 	fmt.Fprintln(ui)
 	fmt.Fprintf(ui, "  le-fi %s > %s\n", sess.channel, filename)
 	fmt.Fprintln(ui)
+	if password != "" {
+		fmt.Fprintln(ui, "Password-protected: they'll be asked for the -p password, any username works.")
+		fmt.Fprintln(ui, "Note: a wrong password doesn't end the send, they can retry.")
+		fmt.Fprintln(ui)
+	}
 	fmt.Fprintln(ui, "Channel name:")
 	fmt.Fprintln(ui)
 	fmt.Fprintf(ui, "  %s\n", sess.channel)
@@ -163,17 +185,17 @@ loop:
 // stdin isn't seekable, so a dropped connection can't be retried; the
 // tool just reports the failure and exits (see runSendServer's retry
 // parameter).
-func runSendFromStdin() int {
+func runSendFromStdin(password string) int {
 	filename := fmt.Sprintf("%s-%s.bin", slugify(currentUsername()), time.Now().Format("2006-01-02"))
 	provider := func() (io.ReadCloser, error) {
 		return io.NopCloser(os.Stdin), nil
 	}
-	return runSendServer(filename, -1, provider, false)
+	return runSendServer(filename, -1, provider, false, password)
 }
 
 // runSendFromFile implements `le-fi filetosend` (a real, existing file
 // path, no piping involved).
-func runSendFromFile(path string) int {
+func runSendFromFile(path, password string) int {
 	info, err := os.Stat(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -184,7 +206,7 @@ func runSendFromFile(path string) int {
 	provider := func() (io.ReadCloser, error) {
 		return os.Open(path)
 	}
-	return runSendServer(filename, size, provider, true)
+	return runSendServer(filename, size, provider, true, password)
 }
 
 // runSendFromDirectory implements `le-fi directory/`: the directory is
@@ -192,7 +214,7 @@ func runSendFromFile(path string) int {
 // format plus gzip both write straight through with no seeking needed,
 // so this works for a directory of any size with nothing buffered to
 // disk or memory) and sent as that single file.
-func runSendFromDirectory(path string) int {
+func runSendFromDirectory(path, password string) int {
 	base := dirBaseName(path)
 	filename := base + ".tar.gz"
 
@@ -205,5 +227,5 @@ func runSendFromDirectory(path string) int {
 		return pr, nil
 	}
 	// Compressed size isn't known ahead of time - no Content-Length.
-	return runSendServer(filename, -1, provider, true)
+	return runSendServer(filename, -1, provider, true, password)
 }

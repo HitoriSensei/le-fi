@@ -101,6 +101,56 @@ Piped stdin is the one exception: it's streamed straight through with
 nothing buffered to disk or memory, so a dropped connection has nothing
 left to retry from - the process just reports the failure and exits.
 
+### Password-protect a send
+
+You can add a plaintext password to a send:
+
+```bash
+le-fi file_to_send.bin -p <password>
+```
+
+In this mode, opening the link asks for a login (HTTP basic auth), where any username
+is accepted and only the password is checked. 
+
+A wrong password **doesn't** end the send, so the other side can try as
+many times as they need, and that includes piped stdin, since a failed
+login doesn't count as its one attempt.
+
+`le-fi` on the receiving end asks for the password on the terminal, or
+takes it from `-p`:
+
+```bash
+le-fi <channel-name> > out.bin               # asks for the password
+le-fi <channel-name> -p <password> > out.bin
+```
+
+When there's no terminal to ask on and no `-p`, or the password is wrong,
+the receive command fails and the sender keeps waiting for another try.
+
+### Password-protect a receive
+
+You can add a password to a receive the same way:
+
+```bash
+le-fi -p <password> > out.bin
+```
+
+In this mode, both the drop-zone page and the upload itself ask for a
+login, again with any username accepted. A wrong password **doesn't** use
+up the single transfer, so the other side can keep trying.
+
+`le-fi` on the sending end asks for the password before it starts
+sending, or takes it from `-p`:
+
+```bash
+le-fi <channel-name> < file_to_send.bin                # asks for the password
+le-fi <channel-name> -p <password> < file_to_send.bin
+```
+
+When there's no terminal to ask on and no `-p`, or the password is wrong,
+the send command fails before reading anything from the file or stdin, and
+the receiver keeps waiting.
+
 ### Talk to a channel you already have
 
 ```bash
@@ -207,10 +257,13 @@ None, by design.
   is buffered, so there's nothing left to retry from once a drop happens.
   Run it again for another transfer either way (new random channel name
   each time).
-- No auth on the endpoint while the tunnel is up — anyone who learns the
-  URL before the transfer finishes could push data to it. Fine for a
+- No auth on the endpoint while the tunnel is up unless `-p` is used, so
+  anyone who learns the URL before the transfer finishes could push data
+  to it, or pull the file that's being sent. Fine for a
   quick ad-hoc handoff between two parties who already know the address,
   not something to leave running unattended.
+- The `-p` password is a command line argument, so other users on the
+  same machine can see it in `ps` while le-fi runs.
 - The freshly-printed `trycloudflare.com` URL can take a few seconds to
   become reachable on Cloudflare's edge. If the very first send attempt
   gets a 530/1033 error, just retry — it clears up quickly.

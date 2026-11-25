@@ -28,6 +28,18 @@ RECEIVING A FILE
    of the commands you sent. Either way it streams straight to you,
    and le-fi tells you when it's done.
 
+To require a password for the upload, add -p:
+
+       ./le-fi -p some-password > myfile.zip
+
+Opening the link then asks for a login, where any username is
+accepted and only the password is checked. A wrong password doesn't
+end the receive, so the other person can try as many times as they
+need. If they use le-fi, it asks for the password, or they can give
+it with -p:
+
+       ./le-fi <channel-name> -p some-password < myfile.zip
+
 
 SENDING A FILE
 --------------
@@ -50,6 +62,17 @@ exception: it streams straight through with nothing saved anywhere,
 so a dropped connection can't be retried - that one just stops and
 reports the failure.
 
+To require a password for the download, add -p:
+
+       ./le-fi myfile.zip -p some-password
+
+Opening the link then asks for a login, where any username works and
+only the password is checked. A wrong password doesn't stop the send,
+so the other person can try as many times as they need. If they use
+le-fi, it asks for the password, or they can give it with -p:
+
+       ./le-fi <channel-name> -p some-password > myfile.zip
+
 
 IS THIS SAFE?
 -------------
@@ -62,6 +85,9 @@ has it, for as long as the transfer window stays open (usually well
 under a minute). Don't post it publicly - treat it as a one-time
 link. It stops working once the transfer completes, or Ctrl+C ends it
 early.
+
+Using -p puts a password on top of that, so the link alone isn't
+enough to download or upload the file.
 
 No accounts, no phoning home, no crash reports or usage stats sent
 anywhere - confirmed by watching every network connection le-fi

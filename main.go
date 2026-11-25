@@ -21,16 +21,22 @@ func main() {
 		os.Exit(0)
 	}
 
+	args, password, _, err := extractPassword(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+
 	stdinPiped := !term.IsTerminal(int(os.Stdin.Fd()))
 	stdoutPiped := !term.IsTerminal(int(os.Stdout.Fd()))
 
 	switch len(args) {
 	case 0:
-		os.Exit(dispatchNoArgs(stdinPiped, stdoutPiped))
+		os.Exit(dispatchNoArgs(stdinPiped, stdoutPiped, password))
 	case 1:
-		os.Exit(dispatchOneArg(args[0], stdinPiped, stdoutPiped))
+		os.Exit(dispatchOneArg(args[0], stdinPiped, stdoutPiped, password))
 	case 2:
-		os.Exit(dispatchTwoArgs(args[0], args[1]))
+		os.Exit(dispatchTwoArgs(args[0], args[1], password))
 	default:
 		printHelp()
 		os.Exit(1)
@@ -38,7 +44,7 @@ func main() {
 }
 
 // dispatchNoArgs handles `le-fi`, `le-fi > out`, and `le-fi < file`.
-func dispatchNoArgs(stdinPiped, stdoutPiped bool) int {
+func dispatchNoArgs(stdinPiped, stdoutPiped bool, password string) int {
 	switch {
 	case !stdinPiped && !stdoutPiped:
 		// Bare invocation, nothing piped either way - almost certainly
@@ -47,9 +53,9 @@ func dispatchNoArgs(stdinPiped, stdoutPiped bool) int {
 		printHelp()
 		return 0
 	case stdoutPiped && !stdinPiped:
-		return runReceiveServer()
+		return runReceiveServer(password)
 	case stdinPiped && !stdoutPiped:
-		return runSendFromStdin()
+		return runSendFromStdin(password)
 	default:
 		fmt.Fprintln(os.Stderr, "error: both stdin and stdout are redirected - not sure whether to send or receive.")
 		fmt.Fprintln(os.Stderr, "Use 'le-fi > out' to receive, or 'le-fi < file' to send.")
@@ -59,21 +65,21 @@ func dispatchNoArgs(stdinPiped, stdoutPiped bool) int {
 
 // dispatchOneArg handles `le-fi filetosend`, `le-fi directory/`,
 // `le-fi <channel> > out`, and `le-fi <channel> < file`.
-func dispatchOneArg(arg string, stdinPiped, stdoutPiped bool) int {
+func dispatchOneArg(arg string, stdinPiped, stdoutPiped bool, password string) int {
 	if info, err := os.Stat(arg); err == nil {
 		if info.IsDir() {
-			return runSendFromDirectory(arg)
+			return runSendFromDirectory(arg, password)
 		}
-		return runSendFromFile(arg)
+		return runSendFromFile(arg, password)
 	}
 
 	// Doesn't exist as a local path - treat it as a channel to connect to.
 	channel := arg
 	switch {
 	case stdoutPiped:
-		return runClientReceive(channel)
+		return runClientReceive(channel, password)
 	case stdinPiped:
-		return runClientSend(channel, os.Stdin)
+		return runClientSend(channel, os.Stdin, password)
 	default:
 		fmt.Fprintf(os.Stderr, "error: %q isn't a file or directory here, and no direction was given.\n", arg)
 		fmt.Fprintf(os.Stderr, "Use 'le-fi %s > out' to receive from that channel, or 'le-fi %s < file' to send to it.\n", arg, arg)
@@ -82,14 +88,14 @@ func dispatchOneArg(arg string, stdinPiped, stdoutPiped bool) int {
 }
 
 // dispatchTwoArgs handles `le-fi <channel> filetosend`.
-func dispatchTwoArgs(channel, path string) int {
+func dispatchTwoArgs(channel, path, password string) int {
 	f, err := os.Open(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error opening file:", err)
 		return 1
 	}
 	defer f.Close()
-	return runClientSend(channel, f)
+	return runClientSend(channel, f, password)
 }
 
 func printHelp() {
@@ -120,7 +126,25 @@ USAGE:
 
   Get the direction backwards? le-fi will tell you and suggest the fix.
 
+  Require a password to download what you send, or to upload to you:
+
+      le-fi file_to_send.bin -p <password>
+      le-fi -p <password> > received_file.bin
+
+  Opening the link asks for a login, any username is accepted.
+  A wrong password doesn't end the transfer, the other side can retry.
+  Use a password-protected channel:
+
+      le-fi <channel-name> > out.bin              (asks for the password)
+      le-fi <channel-name> -p <password> > out.bin
+      le-fi <channel-name> -p <password> < file_to_send.bin
+
 FLAGS:
+  -p, --password <password>
+                Without a channel name: require this password from
+                the other side.
+                With a channel name: use this password, if omitted
+                le-fi asks for it.
   -h, --help    Show this help and exit.
 
 Uses a Cloudflare Quick Tunnel (the same free, unauthenticated tunnels

@@ -16,7 +16,12 @@ import (
 // waits for either a browser (GET, served the upload page) or an upload
 // (POST/PUT, written straight to stdout). Single-shot: closes after one
 // transfer attempt, successful or not.
-func runReceiveServer() int {
+//
+// When password is non-empty, both the upload page (GET/HEAD) and the
+// upload itself (PUT/POST) need HTTP basic auth with that password (any
+// username). A failed login is only a 401 for that request, so it never
+// uses up the single transfer attempt.
+func runReceiveServer(password string) int {
 	// Keep a working copy of the real stderr for OUR OWN status messages,
 	// then silence the process's stderr so cloudflared's (hardcoded-on)
 	// internal terminal logging doesn't clutter the output.
@@ -37,6 +42,12 @@ func runReceiveServer() int {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Le-Fi-Role", "receiver")
+
+		// Before receivedOnce is touched: a failed login must leave the
+		// receive exactly as it was.
+		if !checkBasicAuth(w, r, password) {
+			return
+		}
 
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -94,8 +105,15 @@ func runReceiveServer() int {
 
 	fmt.Fprintln(ui, "If the remote party does NOT have this utility, they can send with:")
 	fmt.Fprintln(ui)
-	fmt.Fprintf(ui, "  curl -T - %s < file_to_be_send.bin\n", sess.url)
-	fmt.Fprintf(ui, "  wget --method=PUT --body-file=file_to_be_send.bin %s -O -\n", sess.url)
+	if password != "" {
+		// Without the password on the command line, curl and wget ask
+		// for it, so it isn't shown here.
+		fmt.Fprintf(ui, "  curl -u %s -T - %s < file_to_be_send.bin\n", basicAuthUser, sess.url)
+		fmt.Fprintf(ui, "  wget --user=%s --ask-password --method=PUT --body-file=file_to_be_send.bin %s -O -\n", basicAuthUser, sess.url)
+	} else {
+		fmt.Fprintf(ui, "  curl -T - %s < file_to_be_send.bin\n", sess.url)
+		fmt.Fprintf(ui, "  wget --method=PUT --body-file=file_to_be_send.bin %s -O -\n", sess.url)
+	}
 	fmt.Fprintln(ui)
 	fmt.Fprintln(ui, "...or just open this link in a browser and drop the file on the page:")
 	fmt.Fprintln(ui)
@@ -105,6 +123,11 @@ func runReceiveServer() int {
 	fmt.Fprintln(ui)
 	fmt.Fprintf(ui, "  le-fi %s < file_to_be_send.bin\n", sess.channel)
 	fmt.Fprintln(ui)
+	if password != "" {
+		fmt.Fprintln(ui, "Password-protected: they'll be asked for the -p password, any username works.")
+		fmt.Fprintln(ui, "Note: a wrong password doesn't end the receive, they can retry.")
+		fmt.Fprintln(ui)
+	}
 	fmt.Fprintln(ui, "Channel name:")
 	fmt.Fprintln(ui)
 	fmt.Fprintf(ui, "  %s\n", sess.channel)
